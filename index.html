@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -427,7 +425,8 @@ function toggleMirror() {
 
 // ── Start session ──
 async function startSession() {
-  const text = document.getElementById('script-input').value.trim();
+  const textarea = document.getElementById('script-input');
+  const text = (textarea.value || textarea.innerText || '').trim();
   if (!text) { alert('Add your script first!'); return; }
 
   // Build script text
@@ -636,3 +635,6 @@ document.getElementById('script-input').addEventListener('focus', () => {
 // Prevent HUD and bumps from triggering the tap-to-pause overlay
 document.querySelector('.prompter-hud').addEventListener('click', e => e.stopPropagation());
 document.querySelector('.speed-bumps').addEventListener('click', e => e.stopPropagation());
+</script>
+</body>
+</html>

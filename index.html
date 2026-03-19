@@ -22,32 +22,35 @@
 }
  
 html, body {
-  height: 100%; background: #000; color: #fff;
-  font-family: 'DM Mono', monospace; overflow: hidden;
+  height: 100%;
+  background: #000;
+  color: #fff;
+  font-family: 'DM Mono', monospace;
   -webkit-tap-highlight-color: transparent;
-  user-select: none; -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-select: none;
+  /* DO NOT set overflow:hidden on body — causes iOS cursor jump bug */
 }
- 
-.screen {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  transition: opacity 0.28s, transform 0.28s;
-}
-.screen.hidden { opacity: 0; pointer-events: none; transform: translateY(14px); }
  
 /* ══════════════════════════════════════
    EDITOR SCREEN
+   Normal document flow so iOS keyboard
+   behaves correctly with textarea
 ══════════════════════════════════════ */
 #editor-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
   background: var(--bg);
   padding-top: calc(var(--safe-top) + 16px);
   padding-bottom: calc(var(--safe-bottom) + 16px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
 }
  
 .editor-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 20px 16px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .app-title {
   font-family: 'DM Serif Display', serif;
@@ -60,7 +63,7 @@ html, body {
   font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
 }
  
-.controls-bar { display: flex; flex-direction: column; }
+.controls-bar { display: flex; flex-direction: column; flex-shrink: 0; }
  
 .control-group {
   display: flex; align-items: center;
@@ -87,6 +90,7 @@ html, body {
 .toggle-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 13px 20px; border-bottom: 1px solid var(--border); cursor: pointer;
+  flex-shrink: 0;
 }
 .toggle-label-wrap { display: flex; flex-direction: column; gap: 3px; }
 .toggle-label-wrap .main { font-size: 13px; color: #f5f0e8; }
@@ -99,96 +103,102 @@ html, body {
 .pill.on { background: #5a3d00; }
 .pill::after {
   content: ''; position: absolute; width: 18px; height: 18px;
-  border-radius: 50%; background: #555; top: 4px; left: 4px; transition: transform 0.2s, background 0.2s;
+  border-radius: 50%; background: #555; top: 4px; left: 4px;
+  transition: transform 0.2s, background 0.2s;
 }
 .pill.on::after { transform: translateX(18px); background: var(--amber); }
  
 .textarea-wrap {
-  flex: 1; padding: 0 20px 10px; display: flex; flex-direction: column; min-height: 0;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 20px 20px;
+  min-height: 200px;
 }
 textarea {
-  flex: 1; background: transparent; border: none; outline: none; resize: none;
+  flex: 1;
+  background: transparent; border: none; outline: none; resize: none;
   color: #f5f0e8; font-family: 'DM Serif Display', serif;
-  font-size: 18px; line-height: 1.65; padding: 16px 0; width: 100%;
-  -webkit-user-select: text; user-select: text;
-  transform: translateZ(0); /* prevents iOS jump-to-top-left on focus */
+  font-size: 18px; line-height: 1.65;
+  padding: 16px 0;
+  width: 100%;
+  min-height: 180px;
+  -webkit-user-select: text;
+  user-select: text;
+  /* Critical: stops iOS repositioning viewport on focus */
+  -webkit-appearance: none;
 }
 textarea::placeholder { color: var(--text-dim); }
-.char-count { font-size: 10px; color: var(--text-dim); text-align: right; padding-top: 4px; }
+.char-count {
+  font-size: 10px; color: var(--text-dim);
+  text-align: right; padding-top: 6px; flex-shrink: 0;
+}
+ 
+/* ══════════════════════════════════════
+   OVERLAY SCREENS (prompter + playback)
+   These sit on top of the editor
+══════════════════════════════════════ */
+#prompter-screen,
+#playback-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  transition: opacity 0.28s, transform 0.28s;
+  z-index: 50;
+}
+#prompter-screen.hidden,
+#playback-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(14px);
+}
  
 /* ══════════════════════════════════════
    PROMPTER SCREEN
-   Camera full-screen, opaque text on top
 ══════════════════════════════════════ */
 #prompter-screen { background: #000; }
  
-/* Camera fills entire screen */
 #live-camera {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1); /* natural selfie mirror */
-  z-index: 1;
+  object-fit: cover; transform: scaleX(-1); z-index: 1;
 }
  
-/* Dark band behind the scrolling text so it's always readable */
 #text-band {
-  position: absolute;
-  left: 0; right: 0;
-  top: 20%; bottom: 20%;
-  background: rgba(0,0,0,0.52);
-  z-index: 2;
-  pointer-events: none;
+  position: absolute; left: 0; right: 0; top: 18%; bottom: 18%;
+  background: rgba(0,0,0,0.5); z-index: 2; pointer-events: none;
 }
- 
-/* Gradient top & bottom fades on the band edges */
 #text-band::before, #text-band::after {
-  content: ''; position: absolute; left: 0; right: 0; height: 60px;
-  pointer-events: none;
+  content: ''; position: absolute; left: 0; right: 0; height: 60px; pointer-events: none;
 }
-#text-band::before {
-  top: -60px;
-  background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.52));
-}
-#text-band::after {
-  bottom: -60px;
-  background: linear-gradient(to top, transparent, rgba(0,0,0,0.52));
-}
+#text-band::before { top: -60px; background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.5)); }
+#text-band::after  { bottom: -60px; background: linear-gradient(to top, transparent, rgba(0,0,0,0.5)); }
  
-/* The scrolling text container clips to the band area */
 #script-scroll {
-  position: absolute;
-  left: 0; right: 0;
-  top: 20%; bottom: 20%;
-  overflow: hidden;
-  z-index: 4;
+  position: absolute; left: 0; right: 0; top: 18%; bottom: 18%;
+  overflow: hidden; z-index: 4;
 }
- 
 #script-text {
   padding: 40vh 28px 40vh;
   font-family: 'DM Serif Display', serif;
-  line-height: 1.55;
-  color: #ffffff; /* fully opaque white */
-  text-shadow: 0 1px 8px rgba(0,0,0,0.8), 0 0 30px rgba(0,0,0,0.5);
+  line-height: 1.55; color: #fff;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 30px rgba(0,0,0,0.6);
   will-change: transform;
 }
  
-/* Reading line marker */
 .read-line {
   position: absolute; left: 0; right: 0; top: 50%; height: 2px;
-  background: rgba(240,165,0,0.35); z-index: 5; pointer-events: none;
+  background: rgba(240,165,0,0.3); z-index: 5; pointer-events: none;
 }
  
-/* Top HUD: stop / speed / pause */
 .prompter-hud {
   position: absolute; top: calc(var(--safe-top) + 14px);
   left: 0; right: 0; z-index: 10;
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 16px; gap: 10px;
 }
- 
 .hud-btn {
-  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.2);
   border-radius: 8px; color: #fff; padding: 9px 14px;
   font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -196,49 +206,38 @@ textarea::placeholder { color: var(--text-dim); }
 }
 .hud-btn.danger { color: var(--red); border-color: rgba(255,69,58,0.4); }
  
-.hud-center {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-}
-.hud-speed {
-  font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 1px;
-  transition: color 0.4s;
-}
+.hud-center { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.hud-speed { font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 1px; transition: color 0.4s; }
 .rec-indicator {
   display: flex; align-items: center; gap: 5px;
-  font-size: 10px; color: var(--red); letter-spacing: 1px; opacity: 0;
-  transition: opacity 0.3s;
+  font-size: 10px; color: var(--red); letter-spacing: 1px;
+  opacity: 0; transition: opacity 0.3s;
 }
 .rec-indicator.on { opacity: 1; }
-.rec-dot {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--red);
-  animation: blink 1.1s ease-in-out infinite;
-}
+.rec-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: blink 1.1s ease-in-out infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
  
-/* Speed bump buttons on the side */
 .speed-bumps {
   position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
   display: flex; flex-direction: column; gap: 12px; z-index: 10;
 }
 .bump-btn {
-  width: 42px; height: 42px; border-radius: 50%;
-  background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);
-  color: #fff; font-size: 20px;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.22);
+  color: #fff; font-size: 22px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
  
-/* Progress bar at bottom */
 .progress-bar {
   position: absolute; bottom: 0; left: 0; right: 0;
   height: 3px; background: rgba(255,255,255,0.1); z-index: 10;
 }
 .progress-fill { height: 100%; background: var(--amber); width: 0%; transition: width 0.1s linear; }
  
-/* Pause badge */
 .pause-badge {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-  background: rgba(0,0,0,0.75); border: 1px solid var(--amber);
+  background: rgba(0,0,0,0.78); border: 1px solid var(--amber);
   border-radius: 12px; padding: 12px 28px;
   font-size: 13px; color: var(--amber); letter-spacing: 2px; text-transform: uppercase;
   z-index: 15; opacity: 0; transition: opacity 0.2s; pointer-events: none;
@@ -247,36 +246,19 @@ textarea::placeholder { color: var(--text-dim); }
  
 .tap-hint {
   position: absolute; bottom: calc(var(--safe-bottom) + 12px); left: 50%; transform: translateX(-50%);
-  font-size: 9px; color: rgba(255,255,255,0.25); letter-spacing: 1px;
+  font-size: 9px; color: rgba(255,255,255,0.22); letter-spacing: 1px;
   text-transform: uppercase; z-index: 10; white-space: nowrap;
 }
  
 /* ══════════════════════════════════════
    PLAYBACK SCREEN
 ══════════════════════════════════════ */
-#playback-screen { background: #000; justify-content: center; align-items: center; }
+#playback-screen { background: #000; }
  
 #playback-video {
   width: 100%; height: 100%; object-fit: cover;
   position: absolute; inset: 0;
 }
- 
-.playback-controls {
-  position: absolute; bottom: calc(var(--safe-bottom) + 24px);
-  left: 0; right: 0; z-index: 10;
-  display: flex; justify-content: center; gap: 14px; padding: 0 20px;
-}
- 
-.pb-btn {
-  flex: 1; max-width: 180px;
-  background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 10px; color: #fff; padding: 14px 10px;
-  font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  text-transform: uppercase; letter-spacing: 0.5px; text-align: center;
-}
-.pb-btn.amber { background: var(--amber); color: #000; border-color: var(--amber); }
-.pb-btn.danger { color: var(--red); border-color: rgba(255,69,58,0.4); }
  
 .playback-top {
   position: absolute; top: calc(var(--safe-top) + 14px);
@@ -285,28 +267,32 @@ textarea::placeholder { color: var(--text-dim); }
 }
 .playback-title {
   font-family: 'DM Serif Display', serif;
-  font-size: 18px; color: #fff;
-  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  font-size: 20px; color: #fff;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.9);
 }
  
-/* ══════════════════════════════════════
-   DOWNLOAD DONE TOAST
-══════════════════════════════════════ */
-.toast {
-  position: fixed; bottom: calc(var(--safe-bottom) + 80px); left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: #1a1a1a; border: 1px solid #333; border-radius: 10px;
-  padding: 12px 20px; font-size: 12px; color: #fff;
-  z-index: 100; opacity: 0; transition: opacity 0.3s, transform 0.3s;
-  white-space: nowrap; pointer-events: none;
+.playback-controls {
+  position: absolute; bottom: calc(var(--safe-bottom) + 24px);
+  left: 0; right: 0; z-index: 10;
+  display: flex; justify-content: center; gap: 12px; padding: 0 20px;
 }
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.pb-btn {
+  flex: 1; max-width: 160px;
+  background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 12px; color: #fff; padding: 16px 10px;
+  font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  text-transform: uppercase; letter-spacing: 0.5px; text-align: center;
+  line-height: 1.3;
+}
+.pb-btn.amber { background: var(--amber); color: #000; border-color: var(--amber); font-weight: 500; }
+.pb-btn.danger { color: var(--red); border-color: rgba(255,69,58,0.4); }
 </style>
 </head>
 <body>
  
-<!-- ══ EDITOR ══ -->
-<div id="editor-screen" class="screen">
+<!-- ══ EDITOR — normal document flow, no position:absolute ══ -->
+<div id="editor-screen">
   <div class="editor-header">
     <span class="app-title">Prompter</span>
     <button class="start-btn" onclick="startSession()">▶ Start</button>
@@ -339,24 +325,13 @@ textarea::placeholder { color: var(--text-dim); }
   </div>
 </div>
  
-<!-- ══ PROMPTER ══ -->
-<div id="prompter-screen" class="screen hidden">
- 
-  <!-- Full-screen live camera -->
+<!-- ══ PROMPTER — fixed overlay ══ -->
+<div id="prompter-screen" class="hidden">
   <video id="live-camera" autoplay muted playsinline></video>
- 
-  <!-- Semi-transparent band behind script -->
   <div id="text-band"></div>
- 
-  <!-- Reading cursor line -->
   <div class="read-line"></div>
+  <div id="script-scroll"><div id="script-text"></div></div>
  
-  <!-- Scrolling script -->
-  <div id="script-scroll">
-    <div id="script-text"></div>
-  </div>
- 
-  <!-- HUD -->
   <div class="prompter-hud">
     <button class="hud-btn danger" onclick="stopSession()">✕ Stop</button>
     <div class="hud-center">
@@ -366,22 +341,19 @@ textarea::placeholder { color: var(--text-dim); }
     <button class="hud-btn" onclick="togglePause()" id="pause-btn">⏸ Pause</button>
   </div>
  
-  <!-- Speed adjust -->
   <div class="speed-bumps">
     <div class="bump-btn" onclick="bumpSpeed(1)">+</div>
     <div class="bump-btn" onclick="bumpSpeed(-1)">−</div>
   </div>
  
-  <div id="prompter-scroll-tap" style="position:absolute;inset:0;z-index:6;" onclick="togglePause()"></div>
-  <!-- HUD and bumps need to receive clicks, so pointer-events handled via z-index -->
- 
+  <div style="position:absolute;inset:0;z-index:6;" onclick="handleScreenTap(event)"></div>
   <div class="pause-badge" id="pause-badge">PAUSED</div>
   <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
   <div class="tap-hint">TAP SCREEN TO PAUSE  •  +/− SPEED</div>
 </div>
  
-<!-- ══ PLAYBACK ══ -->
-<div id="playback-screen" class="screen hidden">
+<!-- ══ PLAYBACK — fixed overlay ══ -->
+<div id="playback-screen" class="hidden">
   <video id="playback-video" controls playsinline></video>
  
   <div class="playback-top">
@@ -390,13 +362,10 @@ textarea::placeholder { color: var(--text-dim); }
  
   <div class="playback-controls">
     <button class="pb-btn danger" onclick="discardTake()">🗑 Discard</button>
-    <button class="pb-btn amber" onclick="downloadTake()">⬇ Save Video</button>
+    <button class="pb-btn amber" id="save-btn" onclick="saveTake()">📤 Save to Photos</button>
     <button class="pb-btn" onclick="goBackToEditor()">✏ Re-edit</button>
   </div>
 </div>
- 
-<!-- Toast -->
-<div class="toast" id="toast"></div>
  
 <script>
 // ── State ──
@@ -404,8 +373,6 @@ let speed = 20, fontSize = 32, mirrored = false;
 let scrollY = 0, totalHeight = 0;
 let animFrame = null, paused = false, lastTs = null;
 let wakeLock = null;
- 
-// Camera / recording
 let stream = null, mediaRecorder = null;
 let chunks = [], videoBlob = null;
  
@@ -427,63 +394,55 @@ function toggleMirror() {
   document.getElementById('mirror-pill').classList.toggle('on', mirrored);
 }
  
-// ── Start session ──
+// ── Start ──
 async function startSession() {
-  const textarea = document.getElementById('script-input');
-  const text = (textarea.value || textarea.innerText || '').trim();
-  if (!text) { alert('Add your script first!'); return; }
+  const ta = document.getElementById('script-input');
+  const text = ta.value.trim();
+  if (!text) { alert('Type your script first!'); return; }
  
-  // Build script text
+  // Blur keyboard before switching screens
+  ta.blur();
+ 
   const el = document.getElementById('script-text');
   el.style.fontSize = fontSize + 'px';
   el.style.transform = mirrored ? 'scaleX(-1)' : '';
   el.innerHTML = text.split(/\n+/)
-    .map(p => `<p style="margin-bottom:${Math.round(fontSize * 0.75)}px">${esc(p)}</p>`)
+    .map(p => `<p style="margin-bottom:${Math.round(fontSize*0.75)}px">${esc(p)}</p>`)
     .join('');
  
   scrollY = 0; paused = false; lastTs = null;
   chunks = []; videoBlob = null;
  
-  // Camera + recording
   const camOk = await initCamera();
- 
-  show('prompter-screen');
   document.getElementById('rec-indicator').classList.toggle('on', camOk);
   document.getElementById('hud-speed').textContent = 'SPEED ' + speed;
  
+  showScreen('prompter-screen');
   requestWakeLock();
  
   requestAnimationFrame(() => {
-    // totalHeight = scrollable distance inside the clip
     const scrollEl = document.getElementById('script-scroll');
     const textEl   = document.getElementById('script-text');
-    totalHeight = textEl.scrollHeight - scrollEl.clientHeight;
-    if (totalHeight < 0) totalHeight = 0;
+    totalHeight = Math.max(0, textEl.scrollHeight - scrollEl.clientHeight);
     kick();
   });
 }
  
-// ── Camera init ──
+// ── Camera ──
 async function initCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: true
     });
- 
-    const liveVid = document.getElementById('live-camera');
-    liveVid.srcObject = stream;
- 
-    // Pick best MIME
+    document.getElementById('live-camera').srcObject = stream;
     const mime = pickMime();
     mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
     mediaRecorder.onstop = onRecordStop;
     mediaRecorder.start(500);
     return true;
-  } catch (e) {
-    console.warn('Camera unavailable:', e);
-    // Hide camera video, keep text visible on black
+  } catch(e) {
     document.getElementById('live-camera').style.display = 'none';
     document.getElementById('text-band').style.background = 'transparent';
     return false;
@@ -491,36 +450,26 @@ async function initCamera() {
 }
  
 function pickMime() {
-  const list = [
-    'video/mp4;codecs=avc1,mp4a.40.2',
-    'video/mp4',
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm'
-  ];
-  return list.find(m => MediaRecorder.isTypeSupported(m)) || '';
+  return ['video/mp4;codecs=avc1,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
+    .find(m => MediaRecorder.isTypeSupported(m)) || '';
 }
  
-// ── Scroll engine ──
+// ── Scroll ──
 function kick() {
   if (animFrame) cancelAnimationFrame(animFrame);
   lastTs = null;
   animFrame = requestAnimationFrame(tick);
 }
- 
 function tick(ts) {
   if (!paused) {
     if (!lastTs) lastTs = ts;
     const dt = ts - lastTs; lastTs = ts;
     scrollY += 0.003 * speed * dt;
     if (scrollY > totalHeight) scrollY = totalHeight;
- 
     const el = document.getElementById('script-text');
     el.style.transform = (mirrored ? 'scaleX(-1) ' : '') + `translateY(${-scrollY}px)`;
- 
-    const pct = totalHeight > 0 ? (scrollY / totalHeight) * 100 : 0;
-    document.getElementById('progress-fill').style.width = pct + '%';
- 
+    document.getElementById('progress-fill').style.width =
+      (totalHeight > 0 ? (scrollY / totalHeight) * 100 : 0) + '%';
     if (scrollY >= totalHeight) {
       paused = true;
       document.getElementById('pause-badge').classList.add('visible');
@@ -530,15 +479,19 @@ function tick(ts) {
   animFrame = requestAnimationFrame(tick);
 }
  
-// ── Pause ──
+// ── Pause / tap ──
 function togglePause() {
   paused = !paused;
   document.getElementById('pause-btn').textContent = paused ? '▶ Play' : '⏸ Pause';
   document.getElementById('pause-badge').classList.toggle('visible', paused);
-  if (!paused) { lastTs = null; }
+  if (!paused) lastTs = null;
+}
+function handleScreenTap(e) {
+  // Don't fire if tapping HUD or bumps
+  if (e.target.closest('.prompter-hud') || e.target.closest('.speed-bumps')) return;
+  togglePause();
 }
  
-// ── Speed bumps ──
 function bumpSpeed(dir) {
   speed = Math.max(1, Math.min(100, speed + dir * 5));
   const el = document.getElementById('hud-speed');
@@ -547,7 +500,7 @@ function bumpSpeed(dir) {
   setTimeout(() => el.style.color = 'rgba(255,255,255,0.5)', 700);
 }
  
-// ── Stop session ──
+// ── Stop ──
 function stopSession() {
   if (animFrame) cancelAnimationFrame(animFrame);
   paused = false; scrollY = 0;
@@ -556,95 +509,93 @@ function stopSession() {
   if (wakeLock) { wakeLock.release(); wakeLock = null; }
  
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop(); // will trigger onRecordStop → playback screen
+    mediaRecorder.stop();
   } else {
     cleanupStream();
-    show('editor-screen');
+    showScreen(null);
   }
 }
  
 function onRecordStop() {
   cleanupStream();
-  if (!chunks.length) { show('editor-screen'); return; }
- 
+  if (!chunks.length) { showScreen(null); return; }
   const mime = pickMime() || 'video/webm';
   videoBlob = new Blob(chunks, { type: mime });
- 
   const url = URL.createObjectURL(videoBlob);
   const vid = document.getElementById('playback-video');
-  vid.src = url;
-  vid.load();
- 
-  show('playback-screen');
+  vid.src = url; vid.load();
+  // Reset save button
+  const btn = document.getElementById('save-btn');
+  btn.textContent = '📤 Save to Photos';
+  btn.style.cssText = '';
+  btn.className = 'pb-btn amber';
+  showScreen('playback-screen');
 }
  
 function cleanupStream() {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  document.getElementById('live-camera').srcObject = null;
-  document.getElementById('live-camera').style.display = '';
+  const cam = document.getElementById('live-camera');
+  cam.srcObject = null; cam.style.display = '';
   document.getElementById('rec-indicator').classList.remove('on');
 }
  
-// ── Playback actions ──
-function downloadTake() {
+// ── Save — uses native iOS share sheet ──
+async function saveTake() {
   if (!videoBlob) return;
+  const btn = document.getElementById('save-btn');
+ 
+  // Try Web Share API first — gives native iOS share sheet with "Save Video" option
+  if (navigator.canShare && navigator.canShare({ files: [new File([videoBlob], 'take.mp4', { type: videoBlob.type })] })) {
+    try {
+      const file = new File([videoBlob], `take-${Date.now()}.mp4`, { type: videoBlob.type });
+      await navigator.share({ files: [file], title: 'My Prompter Take' });
+      btn.textContent = '✅ Saved!';
+      btn.style.background = '#1a3a1a';
+      btn.style.color = '#5dfc5d';
+      btn.style.borderColor = '#5dfc5d';
+      return;
+    } catch(e) {
+      // User cancelled share — do nothing
+      if (e.name === 'AbortError') return;
+    }
+  }
+ 
+  // Fallback: direct download
   const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
   const url = URL.createObjectURL(videoBlob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `take-${Date.now()}.${ext}`;
+  a.href = url; a.download = `take-${Date.now()}.${ext}`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  // Update button to show next step clearly
-  const btn = document.querySelector('.pb-btn.amber');
-  btn.innerHTML = '✅ Downloaded!<br><span style="font-size:9px;opacity:0.8">Files app → Downloads → Share → Save Video</span>';
+  btn.textContent = '✅ Check Downloads';
   btn.style.background = '#1a3a1a';
   btn.style.color = '#5dfc5d';
   btn.style.borderColor = '#5dfc5d';
-  btn.style.lineHeight = '1.4';
 }
  
 function discardTake() {
   if (!confirm('Discard this take?')) return;
   videoBlob = null; chunks = [];
   document.getElementById('playback-video').src = '';
-  show('editor-screen');
+  showScreen(null);
 }
+function goBackToEditor() { showScreen(null); }
  
-function goBackToEditor() {
-  show('editor-screen');
+// ── Screen management ──
+function showScreen(id) {
+  document.getElementById('prompter-screen').classList.toggle('hidden', id !== 'prompter-screen');
+  document.getElementById('playback-screen').classList.toggle('hidden', id !== 'playback-screen');
 }
  
 // ── Helpers ──
-function show(id) {
-  ['editor-screen','prompter-screen','playback-screen'].forEach(s => {
-    document.getElementById(s).classList.toggle('hidden', s !== id);
-  });
-}
- 
 function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
- 
 async function requestWakeLock() {
   try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
 }
  
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 4000);
-}
- 
-// Prevent iOS from scrolling to top-left when textarea is focused
-document.getElementById('script-input').addEventListener('focus', () => {
-  setTimeout(() => {
-    document.getElementById('script-input').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, 300);
-});
- 
-// Prevent HUD and bumps from triggering the tap-to-pause overlay
+// Prevent HUD buttons from triggering tap overlay
 document.querySelector('.prompter-hud').addEventListener('click', e => e.stopPropagation());
 document.querySelector('.speed-bumps').addEventListener('click', e => e.stopPropagation());
 </script>

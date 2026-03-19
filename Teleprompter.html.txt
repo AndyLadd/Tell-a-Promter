@@ -1,0 +1,638 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Prompter">
+<title>Prompter</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0a;
+  --border: #2a2a2a;
+  --text-dim: #6b6560;
+  --amber: #f0a500;
+  --red: #ff453a;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html, body {
+  height: 100%; background: #000; color: #fff;
+  font-family: 'DM Mono', monospace; overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none; -webkit-user-select: none;
+}
+
+.screen {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  transition: opacity 0.28s, transform 0.28s;
+}
+.screen.hidden { opacity: 0; pointer-events: none; transform: translateY(14px); }
+
+/* ══════════════════════════════════════
+   EDITOR SCREEN
+══════════════════════════════════════ */
+#editor-screen {
+  background: var(--bg);
+  padding-top: calc(var(--safe-top) + 16px);
+  padding-bottom: calc(var(--safe-bottom) + 16px);
+}
+
+.editor-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px 16px; border-bottom: 1px solid var(--border);
+}
+.app-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 22px; color: var(--amber); letter-spacing: -0.4px;
+}
+.start-btn {
+  background: var(--amber); color: #000; border: none;
+  border-radius: 8px; padding: 10px 22px;
+  font-family: 'DM Mono', monospace; font-size: 13px;
+  font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+}
+
+.controls-bar { display: flex; flex-direction: column; }
+
+.control-group {
+  display: flex; align-items: center;
+  padding: 11px 20px; gap: 12px; border-bottom: 1px solid var(--border);
+}
+.ctrl-label {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px;
+  color: var(--text-dim); width: 42px; flex-shrink: 0;
+}
+.slider {
+  -webkit-appearance: none; flex: 1; height: 3px;
+  background: var(--border); border-radius: 2px; outline: none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--amber); cursor: pointer;
+  box-shadow: 0 0 0 4px rgba(240,165,0,0.15);
+}
+.val-display {
+  font-size: 13px; font-weight: 500; color: var(--amber);
+  width: 32px; text-align: right; flex-shrink: 0;
+}
+
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 20px; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.toggle-label-wrap { display: flex; flex-direction: column; gap: 3px; }
+.toggle-label-wrap .main { font-size: 13px; color: #f5f0e8; }
+.toggle-label-wrap .sub { font-size: 10px; color: var(--text-dim); }
+
+.pill {
+  width: 44px; height: 26px; background: #222;
+  border-radius: 13px; position: relative; transition: background 0.2s; flex-shrink: 0;
+}
+.pill.on { background: #5a3d00; }
+.pill::after {
+  content: ''; position: absolute; width: 18px; height: 18px;
+  border-radius: 50%; background: #555; top: 4px; left: 4px; transition: transform 0.2s, background 0.2s;
+}
+.pill.on::after { transform: translateX(18px); background: var(--amber); }
+
+.textarea-wrap {
+  flex: 1; padding: 0 20px 10px; display: flex; flex-direction: column; min-height: 0;
+}
+textarea {
+  flex: 1; background: transparent; border: none; outline: none; resize: none;
+  color: #f5f0e8; font-family: 'DM Serif Display', serif;
+  font-size: 18px; line-height: 1.65; padding: 16px 0; width: 100%;
+  -webkit-user-select: text; user-select: text;
+}
+textarea::placeholder { color: var(--text-dim); }
+.char-count { font-size: 10px; color: var(--text-dim); text-align: right; padding-top: 4px; }
+
+/* ══════════════════════════════════════
+   PROMPTER SCREEN
+   Camera full-screen, opaque text on top
+══════════════════════════════════════ */
+#prompter-screen { background: #000; }
+
+/* Camera fills entire screen */
+#live-camera {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* natural selfie mirror */
+  z-index: 1;
+}
+
+/* Dark band behind the scrolling text so it's always readable */
+#text-band {
+  position: absolute;
+  left: 0; right: 0;
+  top: 20%; bottom: 20%;
+  background: rgba(0,0,0,0.52);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Gradient top & bottom fades on the band edges */
+#text-band::before, #text-band::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 60px;
+  pointer-events: none;
+}
+#text-band::before {
+  top: -60px;
+  background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.52));
+}
+#text-band::after {
+  bottom: -60px;
+  background: linear-gradient(to top, transparent, rgba(0,0,0,0.52));
+}
+
+/* The scrolling text container clips to the band area */
+#script-scroll {
+  position: absolute;
+  left: 0; right: 0;
+  top: 20%; bottom: 20%;
+  overflow: hidden;
+  z-index: 4;
+}
+
+#script-text {
+  padding: 40vh 28px 40vh;
+  font-family: 'DM Serif Display', serif;
+  line-height: 1.55;
+  color: #ffffff; /* fully opaque white */
+  text-shadow: 0 1px 8px rgba(0,0,0,0.8), 0 0 30px rgba(0,0,0,0.5);
+  will-change: transform;
+}
+
+/* Reading line marker */
+.read-line {
+  position: absolute; left: 0; right: 0; top: 50%; height: 2px;
+  background: rgba(240,165,0,0.35); z-index: 5; pointer-events: none;
+}
+
+/* Top HUD: stop / speed / pause */
+.prompter-hud {
+  position: absolute; top: calc(var(--safe-top) + 14px);
+  left: 0; right: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; gap: 10px;
+}
+
+.hud-btn {
+  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px; color: #fff; padding: 9px 14px;
+  font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
+}
+.hud-btn.danger { color: var(--red); border-color: rgba(255,69,58,0.4); }
+
+.hud-center {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.hud-speed {
+  font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 1px;
+  transition: color 0.4s;
+}
+.rec-indicator {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; color: var(--red); letter-spacing: 1px; opacity: 0;
+  transition: opacity 0.3s;
+}
+.rec-indicator.on { opacity: 1; }
+.rec-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--red);
+  animation: blink 1.1s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* Speed bump buttons on the side */
+.speed-bumps {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 12px; z-index: 10;
+}
+.bump-btn {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);
+  color: #fff; font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+
+/* Progress bar at bottom */
+.progress-bar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 3px; background: rgba(255,255,255,0.1); z-index: 10;
+}
+.progress-fill { height: 100%; background: var(--amber); width: 0%; transition: width 0.1s linear; }
+
+/* Pause badge */
+.pause-badge {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  background: rgba(0,0,0,0.75); border: 1px solid var(--amber);
+  border-radius: 12px; padding: 12px 28px;
+  font-size: 13px; color: var(--amber); letter-spacing: 2px; text-transform: uppercase;
+  z-index: 15; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+}
+.pause-badge.visible { opacity: 1; }
+
+.tap-hint {
+  position: absolute; bottom: calc(var(--safe-bottom) + 12px); left: 50%; transform: translateX(-50%);
+  font-size: 9px; color: rgba(255,255,255,0.25); letter-spacing: 1px;
+  text-transform: uppercase; z-index: 10; white-space: nowrap;
+}
+
+/* ══════════════════════════════════════
+   PLAYBACK SCREEN
+══════════════════════════════════════ */
+#playback-screen { background: #000; justify-content: center; align-items: center; }
+
+#playback-video {
+  width: 100%; height: 100%; object-fit: cover;
+  position: absolute; inset: 0;
+}
+
+.playback-controls {
+  position: absolute; bottom: calc(var(--safe-bottom) + 24px);
+  left: 0; right: 0; z-index: 10;
+  display: flex; justify-content: center; gap: 14px; padding: 0 20px;
+}
+
+.pb-btn {
+  flex: 1; max-width: 180px;
+  background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 10px; color: #fff; padding: 14px 10px;
+  font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  text-transform: uppercase; letter-spacing: 0.5px; text-align: center;
+}
+.pb-btn.amber { background: var(--amber); color: #000; border-color: var(--amber); }
+.pb-btn.danger { color: var(--red); border-color: rgba(255,69,58,0.4); }
+
+.playback-top {
+  position: absolute; top: calc(var(--safe-top) + 14px);
+  left: 16px; right: 16px; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.playback-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 18px; color: #fff;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+}
+
+/* ══════════════════════════════════════
+   DOWNLOAD DONE TOAST
+══════════════════════════════════════ */
+.toast {
+  position: fixed; bottom: calc(var(--safe-bottom) + 80px); left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #1a1a1a; border: 1px solid #333; border-radius: 10px;
+  padding: 12px 20px; font-size: 12px; color: #fff;
+  z-index: 100; opacity: 0; transition: opacity 0.3s, transform 0.3s;
+  white-space: nowrap; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ══ EDITOR ══ -->
+<div id="editor-screen" class="screen">
+  <div class="editor-header">
+    <span class="app-title">Prompter</span>
+    <button class="start-btn" onclick="startSession()">▶ Start</button>
+  </div>
+
+  <div class="controls-bar">
+    <div class="control-group">
+      <span class="ctrl-label">Speed</span>
+      <input type="range" class="slider" id="speed-slider" min="1" max="100" value="20" oninput="onSpeedSlider()">
+      <span class="val-display" id="speed-val">20</span>
+    </div>
+    <div class="control-group">
+      <span class="ctrl-label">Size</span>
+      <input type="range" class="slider" id="size-slider" min="16" max="64" value="32" oninput="onSizeSlider()">
+      <span class="val-display" id="size-val">32</span>
+    </div>
+  </div>
+
+  <div class="toggle-row" onclick="toggleMirror()">
+    <div class="toggle-label-wrap">
+      <span class="main">↔ Mirror text</span>
+      <span class="sub">Flip for teleprompter glass setups</span>
+    </div>
+    <div class="pill" id="mirror-pill"></div>
+  </div>
+
+  <div class="textarea-wrap">
+    <textarea id="script-input" placeholder="Paste or type your script here…" oninput="updateCount()" spellcheck="true"></textarea>
+    <div class="char-count" id="char-count">0 characters</div>
+  </div>
+</div>
+
+<!-- ══ PROMPTER ══ -->
+<div id="prompter-screen" class="screen hidden">
+
+  <!-- Full-screen live camera -->
+  <video id="live-camera" autoplay muted playsinline></video>
+
+  <!-- Semi-transparent band behind script -->
+  <div id="text-band"></div>
+
+  <!-- Reading cursor line -->
+  <div class="read-line"></div>
+
+  <!-- Scrolling script -->
+  <div id="script-scroll">
+    <div id="script-text"></div>
+  </div>
+
+  <!-- HUD -->
+  <div class="prompter-hud">
+    <button class="hud-btn danger" onclick="stopSession()">✕ Stop</button>
+    <div class="hud-center">
+      <span class="hud-speed" id="hud-speed">SPEED 20</span>
+      <div class="rec-indicator" id="rec-indicator"><div class="rec-dot"></div>REC</div>
+    </div>
+    <button class="hud-btn" onclick="togglePause()" id="pause-btn">⏸ Pause</button>
+  </div>
+
+  <!-- Speed adjust -->
+  <div class="speed-bumps">
+    <div class="bump-btn" onclick="bumpSpeed(1)">+</div>
+    <div class="bump-btn" onclick="bumpSpeed(-1)">−</div>
+  </div>
+
+  <div id="prompter-scroll-tap" style="position:absolute;inset:0;z-index:6;" onclick="togglePause()"></div>
+  <!-- HUD and bumps need to receive clicks, so pointer-events handled via z-index -->
+
+  <div class="pause-badge" id="pause-badge">PAUSED</div>
+  <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+  <div class="tap-hint">TAP SCREEN TO PAUSE  •  +/− SPEED</div>
+</div>
+
+<!-- ══ PLAYBACK ══ -->
+<div id="playback-screen" class="screen hidden">
+  <video id="playback-video" controls playsinline></video>
+
+  <div class="playback-top">
+    <span class="playback-title">Your Take</span>
+  </div>
+
+  <div class="playback-controls">
+    <button class="pb-btn danger" onclick="discardTake()">🗑 Discard</button>
+    <button class="pb-btn amber" onclick="downloadTake()">⬇ Save Video</button>
+    <button class="pb-btn" onclick="goBackToEditor()">✏ Re-edit</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──
+let speed = 20, fontSize = 32, mirrored = false;
+let scrollY = 0, totalHeight = 0;
+let animFrame = null, paused = false, lastTs = null;
+let wakeLock = null;
+
+// Camera / recording
+let stream = null, mediaRecorder = null;
+let chunks = [], videoBlob = null;
+
+// ── Editor controls ──
+function onSpeedSlider() {
+  speed = +document.getElementById('speed-slider').value;
+  document.getElementById('speed-val').textContent = speed;
+}
+function onSizeSlider() {
+  fontSize = +document.getElementById('size-slider').value;
+  document.getElementById('size-val').textContent = fontSize;
+}
+function updateCount() {
+  const n = document.getElementById('script-input').value.length;
+  document.getElementById('char-count').textContent = n.toLocaleString() + ' character' + (n !== 1 ? 's' : '');
+}
+function toggleMirror() {
+  mirrored = !mirrored;
+  document.getElementById('mirror-pill').classList.toggle('on', mirrored);
+}
+
+// ── Start session ──
+async function startSession() {
+  const text = document.getElementById('script-input').value.trim();
+  if (!text) { alert('Add your script first!'); return; }
+
+  // Build script text
+  const el = document.getElementById('script-text');
+  el.style.fontSize = fontSize + 'px';
+  el.style.transform = mirrored ? 'scaleX(-1)' : '';
+  el.innerHTML = text.split(/\n+/)
+    .map(p => `<p style="margin-bottom:${Math.round(fontSize * 0.75)}px">${esc(p)}</p>`)
+    .join('');
+
+  scrollY = 0; paused = false; lastTs = null;
+  chunks = []; videoBlob = null;
+
+  // Camera + recording
+  const camOk = await initCamera();
+
+  show('prompter-screen');
+  document.getElementById('rec-indicator').classList.toggle('on', camOk);
+  document.getElementById('hud-speed').textContent = 'SPEED ' + speed;
+
+  requestWakeLock();
+
+  requestAnimationFrame(() => {
+    // totalHeight = scrollable distance inside the clip
+    const scrollEl = document.getElementById('script-scroll');
+    const textEl   = document.getElementById('script-text');
+    totalHeight = textEl.scrollHeight - scrollEl.clientHeight;
+    if (totalHeight < 0) totalHeight = 0;
+    kick();
+  });
+}
+
+// ── Camera init ──
+async function initCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: true
+    });
+
+    const liveVid = document.getElementById('live-camera');
+    liveVid.srcObject = stream;
+
+    // Pick best MIME
+    const mime = pickMime();
+    mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = onRecordStop;
+    mediaRecorder.start(500);
+    return true;
+  } catch (e) {
+    console.warn('Camera unavailable:', e);
+    // Hide camera video, keep text visible on black
+    document.getElementById('live-camera').style.display = 'none';
+    document.getElementById('text-band').style.background = 'transparent';
+    return false;
+  }
+}
+
+function pickMime() {
+  const list = [
+    'video/mp4;codecs=avc1,mp4a.40.2',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm'
+  ];
+  return list.find(m => MediaRecorder.isTypeSupported(m)) || '';
+}
+
+// ── Scroll engine ──
+function kick() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  lastTs = null;
+  animFrame = requestAnimationFrame(tick);
+}
+
+function tick(ts) {
+  if (!paused) {
+    if (!lastTs) lastTs = ts;
+    const dt = ts - lastTs; lastTs = ts;
+    scrollY += 0.003 * speed * dt;
+    if (scrollY > totalHeight) scrollY = totalHeight;
+
+    const el = document.getElementById('script-text');
+    el.style.transform = (mirrored ? 'scaleX(-1) ' : '') + `translateY(${-scrollY}px)`;
+
+    const pct = totalHeight > 0 ? (scrollY / totalHeight) * 100 : 0;
+    document.getElementById('progress-fill').style.width = pct + '%';
+
+    if (scrollY >= totalHeight) {
+      paused = true;
+      document.getElementById('pause-badge').classList.add('visible');
+      return;
+    }
+  } else { lastTs = null; }
+  animFrame = requestAnimationFrame(tick);
+}
+
+// ── Pause ──
+function togglePause() {
+  paused = !paused;
+  document.getElementById('pause-btn').textContent = paused ? '▶ Play' : '⏸ Pause';
+  document.getElementById('pause-badge').classList.toggle('visible', paused);
+  if (!paused) { lastTs = null; }
+}
+
+// ── Speed bumps ──
+function bumpSpeed(dir) {
+  speed = Math.max(1, Math.min(100, speed + dir * 5));
+  const el = document.getElementById('hud-speed');
+  el.textContent = 'SPEED ' + speed;
+  el.style.color = 'rgba(240,165,0,1)';
+  setTimeout(() => el.style.color = 'rgba(255,255,255,0.5)', 700);
+}
+
+// ── Stop session ──
+function stopSession() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  paused = false; scrollY = 0;
+  document.getElementById('pause-badge').classList.remove('visible');
+  document.getElementById('pause-btn').textContent = '⏸ Pause';
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop(); // will trigger onRecordStop → playback screen
+  } else {
+    cleanupStream();
+    show('editor-screen');
+  }
+}
+
+function onRecordStop() {
+  cleanupStream();
+  if (!chunks.length) { show('editor-screen'); return; }
+
+  const mime = pickMime() || 'video/webm';
+  videoBlob = new Blob(chunks, { type: mime });
+
+  const url = URL.createObjectURL(videoBlob);
+  const vid = document.getElementById('playback-video');
+  vid.src = url;
+  vid.load();
+
+  show('playback-screen');
+}
+
+function cleanupStream() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  document.getElementById('live-camera').srcObject = null;
+  document.getElementById('live-camera').style.display = '';
+  document.getElementById('rec-indicator').classList.remove('on');
+}
+
+// ── Playback actions ──
+function downloadTake() {
+  if (!videoBlob) return;
+  const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
+  const url = URL.createObjectURL(videoBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `take-${Date.now()}.${ext}`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  showToast('📥 Saved to Downloads — open & share to Photos');
+}
+
+function discardTake() {
+  if (!confirm('Discard this take?')) return;
+  videoBlob = null; chunks = [];
+  document.getElementById('playback-video').src = '';
+  show('editor-screen');
+}
+
+function goBackToEditor() {
+  show('editor-screen');
+}
+
+// ── Helpers ──
+function show(id) {
+  ['editor-screen','prompter-screen','playback-screen'].forEach(s => {
+    document.getElementById(s).classList.toggle('hidden', s !== id);
+  });
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function requestWakeLock() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// Keyboard handling — textarea focus
+document.getElementById('script-input').addEventListener('focus', () => {
+  setTimeout(() => document.getElementById('script-input').scrollIntoView({ behavior: 'smooth', block: 'end' }), 300);
+});
+
+// Prevent HUD and bumps from triggering the tap-to-pause overlay
+document.querySelector('.prompter-hud').addEventListener('click', e => e.stopPropagation());
+document.querySelector('.speed-bumps').addEventListener('click', e => e.stopPropagation());
